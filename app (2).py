@@ -1,142 +1,326 @@
-import os
 import streamlit as st
 from groq import Groq
-from workflow import run_study_workflow
+import json
 
-st.set_page_config(page_title="AI Study Pack Generator", page_icon="📚", layout="wide")
 
-st.title("📚 AI Study Pack Generator")
-st.caption("Personalized AI workflow: Planning → Content → Assessment → Review → Refinement")
+# --------------------------------------------------
+# PAGE SETTINGS
+# --------------------------------------------------
 
-def get_api_key():
-    key = os.getenv("GROQ_API_KEY")
-    if key:
-        return key
-    try:
-        return st.secrets["GROQ_API_KEY"]
-    except Exception:
-        return None
-
-with st.sidebar:
-    st.header("🎯 Learner Profile")
-    level = st.selectbox("Student level", [
-        "School", "High School", "College / University", "Beginner", "Advanced"
-    ])
-    difficulty = st.select_slider("Difficulty", ["Easy", "Medium", "Hard"], value="Medium")
-    language = st.selectbox("Language", ["English", "Urdu", "Roman Urdu"])
-    learning_style = st.selectbox("Learning style", [
-        "Balanced", "Examples first", "Flashcards first", "Exam focused"
-    ])
-    goals = st.text_area("Learning goals", placeholder="What should the student achieve?")
-
-topic = st.text_input("📌 Topic", placeholder="e.g. Photosynthesis, Python loops, Algebra")
-context = st.text_area(
-    "📄 Optional syllabus/context",
-    placeholder="Paste syllabus points, textbook scope, or exam requirements."
+st.set_page_config(
+    page_title="AI Study Pack Generator",
+    page_icon="📚",
+    layout="wide"
 )
 
-if st.button("🚀 Generate Study Pack", type="primary", use_container_width=True):
+
+# --------------------------------------------------
+# GET GROQ API KEY
+# --------------------------------------------------
+
+def get_api_key():
+
+    try:
+        return st.secrets["GROQ_API_KEY"]
+
+    except Exception:
+        st.error("❌ GROQ_API_KEY is not configured.")
+        st.info(
+            "Streamlit Cloud → Manage app → Settings → Secrets "
+            "mein GROQ_API_KEY add karein."
+        )
+        st.stop()
+
+
+# --------------------------------------------------
+# GROQ CLIENT
+# --------------------------------------------------
+
+api_key = get_api_key()
+
+client = Groq(api_key=api_key)
+
+
+# --------------------------------------------------
+# AI FUNCTION
+# --------------------------------------------------
+
+def ask_ai(prompt):
+
+    response = client.chat.completions.create(
+
+        model="llama-3.1-8b-instant",
+
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert AI tutor. "
+                    "Create clear, accurate and student-friendly "
+                    "study material."
+                )
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+
+        temperature=0.7,
+
+        max_tokens=5000
+    )
+
+    return response.choices[0].message.content
+
+
+# --------------------------------------------------
+# HEADER
+# --------------------------------------------------
+
+st.title("📚 AI Study Pack Generator")
+
+st.write(
+    "Generate personalized notes, flashcards, MCQs and practice questions using AI."
+)
+
+
+# --------------------------------------------------
+# SIDEBAR
+# --------------------------------------------------
+
+st.sidebar.header("👨‍🎓 Learner Profile")
+
+
+level = st.sidebar.selectbox(
+    "Level",
+    [
+        "Beginner",
+        "Intermediate",
+        "Advanced"
+    ]
+)
+
+
+difficulty = st.sidebar.selectbox(
+    "Difficulty",
+    [
+        "Easy",
+        "Medium",
+        "Hard"
+    ]
+)
+
+
+language = st.sidebar.selectbox(
+    "Language",
+    [
+        "English",
+        "Urdu"
+    ]
+)
+
+
+learning_style = st.sidebar.selectbox(
+    "Learning Style",
+    [
+        "Visual",
+        "Reading",
+        "Practical",
+        "Mixed"
+    ]
+)
+
+
+goals = st.sidebar.text_area(
+    "Learning Goals",
+    placeholder="Example: Prepare for exam and understand concepts"
+)
+
+
+# --------------------------------------------------
+# MAIN INPUT
+# --------------------------------------------------
+
+st.subheader("📝 Study Topic")
+
+
+topic = st.text_input(
+    "Enter your topic",
+    placeholder="Example: Python Functions"
+)
+
+
+context = st.text_area(
+    "Additional syllabus/context (optional)",
+    placeholder="Enter syllabus, chapter details or important topics..."
+)
+
+
+# --------------------------------------------------
+# GENERATE BUTTON
+# --------------------------------------------------
+
+if st.button("🚀 Generate Study Pack", type="primary"):
+
     if not topic.strip():
-        st.error("Please enter a topic.")
-    elif not get_api_key():
-        st.error("GROQ_API_KEY is missing. Add it to Streamlit Secrets.")
-    else:
-        profile = {
-            "topic": topic.strip(),
-            "level": level,
-            "difficulty": difficulty,
-            "language": language,
-            "learning_style": learning_style,
-            "goals": goals.strip() or "Master the topic.",
-            "context": context.strip() or "No additional context."
-        }
+
+        st.warning("⚠️ Please enter a study topic.")
+
+        st.stop()
+
+
+    # --------------------------------------------------
+    # PROMPT
+    # --------------------------------------------------
+
+    prompt = f"""
+Create a complete personalized study pack.
+
+STUDENT PROFILE
+----------------
+Level: {level}
+Difficulty: {difficulty}
+Language: {language}
+Learning Style: {learning_style}
+Learning Goals: {goals}
+
+TOPIC
+----------------
+{topic}
+
+ADDITIONAL CONTEXT
+----------------
+{context}
+
+
+Create the study pack with these sections:
+
+1. Learning Objectives
+2. Study Plan
+3. Detailed Notes
+4. Key Points
+5. Examples
+6. Flashcards
+7. Multiple Choice Questions
+8. Short Practice Questions
+9. Answers and Explanations
+10. Common Mistakes
+11. Quick Revision Summary
+
+
+Make the content:
+
+- Accurate
+- Easy to understand
+- Appropriate for the student's level
+- Appropriate for the requested difficulty
+- Personalized
+- Well structured
+- Exam friendly
+
+
+Use the requested language.
+
+Format the response clearly using Markdown.
+"""
+
+
+    # --------------------------------------------------
+    # GENERATE
+    # --------------------------------------------------
+
+    with st.spinner("🤖 AI is creating your study pack..."):
+
         try:
-            client = Groq(api_key=get_api_key())
-            with st.status("Running AI workflow...", expanded=True) as status:
-                st.write("1️⃣ Planning learning objectives...")
-                result = run_study_workflow(client, profile, st.write)
-                status.update(label="Workflow completed ✅", state="complete")
-            st.session_state["result"] = result
+
+            result = ask_ai(prompt)
+
         except Exception as e:
-            st.error(f"Workflow failed: {e}")
-            st.info("Check your API key and try again.")
 
-result = st.session_state.get("result")
+            st.error("❌ Something went wrong while contacting Groq.")
 
-if result:
-    plan = result["plan"]
-    review = result["review"]
-    final = result["final"]
+            st.code(str(e))
 
-    st.divider()
-    st.subheader(f"📖 Final Study Pack: {result['profile']['topic']}")
+            st.stop()
 
-    a, b, c = st.columns(3)
-    a.metric("Review score", f"{review.get('score', 0)}/100")
-    b.metric("Approved", "Yes" if review.get("approved") else "Refined")
-    c.metric("Refinement", "Applied" if result["refined"] else "Not needed")
 
-    tabs = st.tabs([
-        "🗺️ Planning", "📝 Notes", "🧠 Flashcards",
-        "❓ MCQs", "🎯 Practice", "🔍 Review"
-    ])
+    # --------------------------------------------------
+    # DISPLAY RESULT
+    # --------------------------------------------------
 
+    st.success("✅ Study Pack Generated Successfully!")
+
+
+    tabs = st.tabs(
+        [
+            "📋 Study Plan",
+            "📖 Notes",
+            "🧠 Flashcards",
+            "❓ MCQs",
+            "✍️ Practice",
+            "🔄 Full Pack"
+        ]
+    )
+
+
+    # Study Plan
     with tabs[0]:
-        st.write("### Learning objectives")
-        for item in plan.get("learning_objectives", []):
-            st.markdown(f"- {item}")
-        st.write("### Study outline")
-        for item in plan.get("outline", []):
-            st.markdown(f"- {item}")
 
+        st.markdown("### 📋 Study Plan")
+
+        st.markdown(result)
+
+
+    # Notes
     with tabs[1]:
-        st.markdown(final.get("notes", ""))
-        st.write("### Key points")
-        for item in final.get("key_points", []):
-            st.markdown(f"- {item}")
-        if final.get("examples"):
-            st.write("### Examples")
-            for item in final["examples"]:
-                st.markdown(f"- {item}")
 
+        st.markdown("### 📖 Notes")
+
+        st.markdown(result)
+
+
+    # Flashcards
     with tabs[2]:
-        for i, card in enumerate(final.get("flashcards", []), 1):
-            with st.expander(f"Card {i}: {card.get('question', '')}"):
-                st.write(card.get("answer", ""))
 
+        st.markdown("### 🧠 Flashcards")
+
+        st.markdown(result)
+
+
+    # MCQs
     with tabs[3]:
-        for i, q in enumerate(final.get("mcqs", []), 1):
-            st.markdown(f"**{i}. {q.get('question', '')}**")
-            answer = st.radio(
-                "Choose an answer:",
-                q.get("options", []),
-                key=f"mcq_{i}",
-                index=None
-            )
-            if st.button("Check answer", key=f"check_{i}"):
-                if answer == q.get("correct_answer"):
-                    st.success("Correct! 🎉")
-                else:
-                    st.error(f"Correct answer: {q.get('correct_answer')}")
-                st.caption(q.get("explanation", ""))
 
+        st.markdown("### ❓ Multiple Choice Questions")
+
+        st.markdown(result)
+
+
+    # Practice
     with tabs[4]:
-        for i, q in enumerate(final.get("short_questions", []), 1):
-            with st.expander(f"Question {i}: {q.get('question', '')}"):
-                st.write(f"**Answer:** {q.get('answer', '')}")
 
+        st.markdown("### ✍️ Practice Questions")
+
+        st.markdown(result)
+
+
+    # Full Pack
     with tabs[5]:
-        st.write(f"**Score:** {review.get('score', 0)}/100")
-        st.write(f"**Approved:** {review.get('approved', False)}")
-        for item in review.get("issues", []):
-            st.markdown(f"- {item}")
+
+        st.markdown(result)
+
+
+    # --------------------------------------------------
+    # DOWNLOAD
+    # --------------------------------------------------
 
     st.download_button(
-        "⬇️ Download Study Pack JSON",
-        data=__import__("json").dumps(result, ensure_ascii=False, indent=2),
-        file_name="study_pack_workflow.json",
-        mime="application/json",
-        use_container_width=True
+
+        label="⬇️ Download Study Pack",
+
+        data=result,
+
+        file_name="study_pack.md",
+
+        mime="text/markdown"
     )
-else:
-    st.info("Enter a topic and learner profile, then click Generate Study Pack.")
